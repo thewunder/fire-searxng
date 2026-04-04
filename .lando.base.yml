@@ -50,14 +50,14 @@ services:
     app_mount: false
     ssl: false
     services:
-      image: ollama/ollama:rocm
+      # User :rocm if you have an AMD GPU
+      image: ollama/ollama
       command: /bin/ollama serve
       volumes:
         - /usr/share/ollama/.ollama:/root/.ollama
       environment:
         OLLAMA_HOST: "0.0.0.0:11434"
-        #HSA_OVERRIDE_GFX_VERSION: "11.0.0"
-        OLLAMA_VULKAN: 1
+        # OLLAMA_VULKAN: 1
 
       devices:
         - /dev/kfd:/dev/kfd

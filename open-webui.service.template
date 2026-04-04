@@ -1,0 +1,16 @@
+[Unit]
+Description=Open WebUI
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'cd /usr/local/ollama-searxng/ && lando start'
+ExecStop=/bin/bash -c 'cd /usr/local/ollama-searxng/ && lando stop'
+RemainAfterExit=yes
+User=youruser
+Group=youruser
+Environment="PATH=/home/youruser/.lando/bin:"
+
+[Install]
+WantedBy=multi-user.target

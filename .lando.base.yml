@@ -43,27 +43,26 @@ services:
         WEBUI_AUTH: false
         OLLAMA_BASE_URL: http://ollama:11434
 
-  ollama:
+  llama-cpp:
     api: 3
     type: lando
     scanner: false
     app_mount: false
     ssl: false
     services:
-      # User :rocm if you have an AMD GPU
-      image: ollama/ollama
-      command: /bin/ollama serve
+      # User -rocm if you have an AMD GPU
+      image: ghcr.io/ggml-org/llama.cpp:server-vulkan
+      command: /app/llama-server -m gemma-4-31B-it-Q4_K_M.gguf --n-gpu-layers -1
       volumes:
-        - /usr/share/ollama/.ollama:/root/.ollama
+        - /usr/share/gguf:/models
       environment:
-        OLLAMA_HOST: "0.0.0.0:11434"
-        # OLLAMA_VULKAN: 1
+        LLAMA_CACHE: unsloth/gemma-4-31B-A4B-it-GGUF
 
       devices:
         - /dev/kfd:/dev/kfd
         - /dev/dri:/dev/dri
       ports:
-        - "11434:11434"
+        - "8080:8080"
 
 proxy:
   searxng:
@@ -71,8 +70,8 @@ proxy:
   open-webui:
     - open-webui.lndo.site:8080
 
-tooling:
-  ollama:
-    service: ollama
-    description: Run ollama CLI commands
-    cmd: ollama
+#tooling:
+#  ollama:
+#    service: ollama
+#    description: Run ollama CLI commands
+#    cmd: ollama

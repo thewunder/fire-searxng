@@ -52,17 +52,17 @@ services:
     services:
       # User -rocm if you have an AMD GPU
       image: ghcr.io/ggml-org/llama.cpp:server-vulkan
-      command: /app/llama-server -m gemma-4-31B-it-Q4_K_M.gguf --n-gpu-layers -1
+      command: /app/llama-server --model /models/Qwen3.6-35B-A3B-UD-Q5_K_XL.gguf --mmproj /models/mmproj-F16.gguf -ngl 999 --ctx-size 262144 --port 8395 --temp 0.7 --top-p 0.95 --top-k 40 --min-p 0.05 --presence-penalty 1.2 --alias qwen3.6-35b-unsloth --no-mmap
       volumes:
         - /usr/share/gguf:/models
       environment:
-        LLAMA_CACHE: unsloth/gemma-4-31B-A4B-it-GGUF
+        LLAMA_CACHE: unsloth/qwen3.6-35b-gguf
 
       devices:
         - /dev/kfd:/dev/kfd
         - /dev/dri:/dev/dri
       ports:
-        - "8080:8080"
+        - "8395:8395"
 
 proxy:
   searxng:

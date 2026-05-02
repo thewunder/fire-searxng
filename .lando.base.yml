@@ -64,9 +64,12 @@ services:
         --port 8395
         --temp 0.7
         --top-p 0.95
-        --top-k 40
-        --min-p 0.05
-        --presence-penalty 1.2
+        --top-k 20
+        --min-p 0.0
+        --presence-penalty 1.5
+        --flash-attn on 
+        --cache-type-k q8_0 
+        --cache-type-v q8_0 
         --alias qwen3.6-35b-unsloth
         --no-mmap
       volumes:

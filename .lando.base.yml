@@ -1,4 +1,4 @@
-name: searxng-openwebui
+name: hermes
 
 services:
   redis:
@@ -27,22 +27,6 @@ services:
       environment:
         SEARXNG_BASE_URL: https://search.lndo.site/
 
-  open-webui:
-    api: 3
-    type: lando
-    scanner: false
-    app_mount: false
-    ssl: true
-    sslExpose: false
-    services:
-      image: ghcr.io/open-webui/open-webui:main
-      command: bash start.sh
-      volumes:
-        - ~/.open-webui:/app/backend/data
-      environment:
-        WEBUI_AUTH: false
-        OLLAMA_BASE_URL: http://ollama:11434
-
   llama-cpp:
     api: 3
     type: lando
@@ -50,18 +34,14 @@ services:
     app_mount: false
     ssl: false
     services:
-      # User -rocm if you have an AMD GPU
-      image: ghcr.io/ggml-org/llama.cpp:server-vulkan
+      image: ghcr.io/ggml-org/llama.cpp:server-cuda
       command: >
         /app/llama-server
-        --model /models/Qwen3.6/Qwen3.6-35B-A3B-UD-Q5_K_XL.gguf
-        --mmproj /models/Qwen3.6/mmproj-F16.gguf
+        --model /models/Qwen3.6/Qwen3.6-27B-UD-Q4_K_XL.gguf
+        --mmproj /models/Qwen3.6/mmproj-BF16.gguf
         --gpu-layers all
-        --ctx-size 524288
-        --yarn-orig-ctx 262144
-        --rope-scaling yarn
-        --rope-scale 2
-        --port 8395
+        --ctx-size 262144
+        --port 5090
         --temp 0.7
         --top-p 0.95
         --top-k 20
@@ -70,27 +50,19 @@ services:
         --flash-attn on 
         --cache-type-k q8_0 
         --cache-type-v q8_0 
-        --alias qwen3.6-35b-unsloth
+        --alias qwen3.6-27b-unsloth
         --no-mmap
       volumes:
-        - ~/gguf:/models
+        - /srv/shared/clawdbot/gguf:/models
       environment:
-        LLAMA_CACHE: unsloth/qwen3.6-35b-gguf
+        LLAMA_CACHE: unsloth/qwen3.6-27b-gguf
 
       devices:
         - /dev/kfd:/dev/kfd
         - /dev/dri:/dev/dri
       ports:
-        - "8395:8395"
+        - "5090:5090"
 
 proxy:
   searxng:
     - search.lndo.site:8080
-  open-webui:
-    - open-webui.lndo.site:8080
-
-#tooling:
-#  ollama:
-#    service: ollama
-#    description: Run ollama CLI commands
-#    cmd: ollama

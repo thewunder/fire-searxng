@@ -54,15 +54,17 @@ services:
       image: ghcr.io/ggml-org/llama.cpp:server-vulkan
       command: >
         /app/llama-server
-        --model /models/Qwen3.6/Qwen3.6-35B-A3B-UD-Q5_K_XL.gguf
+        --model /models/Qwen3.6/Qwen3.6-35B-A3B-MTP-UD-Q5_K_XL.gguf
         --mmproj /models/Qwen3.6/mmproj-F16.gguf
         --gpu-layers all
         --ctx-size 524288
         --yarn-orig-ctx 262144
         --rope-scaling yarn
         --rope-scale 2
+        --spec-type draft-mtp 
+        --spec-draft-n-max 3
         --port 8395
-        --temp 0.7
+        --temp 0.6
         --top-p 0.95
         --top-k 20
         --min-p 0.0

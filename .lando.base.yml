@@ -51,9 +51,9 @@ services:
     ssl: false
     services:
       # User -rocm if you have an AMD GPU
-      image: ghcr.io/ggml-org/llama.cpp:server-vulkan
+      image:   kyuz0/amd-strix-halo-toolboxes:vulkan-radv
       command: >
-        /app/llama-server
+        llama-server
         --model /models/Qwen3.6/Qwen3.6-35B-A3B-MTP-UD-Q5_K_XL.gguf
         --mmproj /models/Qwen3.6/mmproj-F16.gguf
         --gpu-layers all
@@ -62,7 +62,8 @@ services:
         --rope-scaling yarn
         --rope-scale 2
         --spec-type draft-mtp 
-        --spec-draft-n-max 3
+        --spec-draft-n-max 2
+        --host 0.0.0.0
         --port 8395
         --temp 0.6
         --top-p 0.95
@@ -74,6 +75,7 @@ services:
         --cache-type-v q8_0 
         --alias qwen3.6-35b-unsloth
         --no-mmap
+        --jinja
       volumes:
         - ~/gguf:/models
       environment:

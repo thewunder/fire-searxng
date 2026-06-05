@@ -54,13 +54,10 @@ services:
       image:   kyuz0/amd-strix-halo-toolboxes:vulkan-radv
       command: >
         llama-server
-        --model /models/Qwen3.6/Qwen3.6-35B-A3B-MTP-UD-Q5_K_XL.gguf
+        --model /models/Qwen3.6/Qwen3.6-35B-A3B-IQ4_XS-4.19bpw.gguf
         --mmproj /models/Qwen3.6/mmproj-F16.gguf
         --gpu-layers all
-        --ctx-size 524288
-        --yarn-orig-ctx 262144
-        --rope-scaling yarn
-        --rope-scale 2
+        --ctx-size 262144
         --spec-type draft-mtp 
         --spec-draft-n-max 2
         --host 0.0.0.0
@@ -70,10 +67,11 @@ services:
         --top-k 20
         --min-p 0.0
         --presence-penalty 1.5
+        --repeat-penalty 1
         --flash-attn on 
         --cache-type-k q8_0 
         --cache-type-v q8_0 
-        --alias qwen3.6-35b-unsloth
+        --alias qwen3.6-35b-byteshape
         --no-mmap
         --jinja
       volumes:

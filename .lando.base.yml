@@ -27,22 +27,6 @@ services:
       environment:
         SEARXNG_BASE_URL: https://search.lndo.site/
 
-  open-webui:
-    api: 3
-    type: lando
-    scanner: false
-    app_mount: false
-    ssl: true
-    sslExpose: false
-    services:
-      image: ghcr.io/open-webui/open-webui:main
-      command: bash start.sh
-      volumes:
-        - ~/.open-webui:/app/backend/data
-      environment:
-        WEBUI_AUTH: false
-        OLLAMA_BASE_URL: http://ollama:11434
-
   llama-cpp:
     api: 3
     type: lando
@@ -129,6 +113,4 @@ services:
 proxy:
   searxng:
     - search.lndo.site:8080
-  open-webui:
-    - open-webui.lndo.site:8080
 

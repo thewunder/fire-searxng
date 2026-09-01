@@ -22,6 +22,27 @@ instance, orchestrated with [Lando](https://lando.dev/).
 | [SearXNG](https://github.com/searxng/searxng) | Private metasearch engine | [`docker.io/searxng/searxng:latest`](https://hub.docker.com/r/searxng/searxng) |
 | **llama.cpp (ROCmFP4 + MTP)** | OpenAI-compatible LLM server | **built** from [`tools/Dockerfile.rocmfp4`](tools/Dockerfile.rocmfp4) → `llama-rocmfp4-strix:latest` |
 | [Valkey](https://github.com/valkey-io/valkey) | In-memory store for SearXNG | [`docker.io/valkey/valkey:8-alpine`](https://hub.docker.com/r/valkey/valkey) |
+| [Firecrawl](https://github.com/firecrawl/firecrawl) | Self-hosted scrape/extract API (`:3002`, `https://firecrawl.lndo.site`) | [`ghcr.io/firecrawl/firecrawl:latest`](https://github.com/firecrawl/firecrawl/pkgs/container/firecrawl) + Playwright, Redis, RabbitMQ, `nuq-postgres` |
+
+Firecrawl is what Hermes uses for `web_extract`. Keep SearXNG for search. Point Hermes at the published port (do **not** `lando rebuild` the whole app — that rebuilds `llama-cpp` from source):
+
+```yaml
+# ~/.hermes/config.yaml
+web:
+  backend: searxng
+  extract_backend: firecrawl
+```
+
+```bash
+# ~/.hermes/.env
+FIRECRAWL_API_URL=http://localhost:3002
+```
+
+Rebuild only Firecrawl services after changing them:
+
+```sh
+lando rebuild -s firecrawl -s firecrawl-playwright -s firecrawl-redis -s firecrawl-rabbitmq -s firecrawl-postgres -y
+```
 
 ## The LLM service (`llama-cpp`)
 
@@ -138,20 +159,26 @@ LLM_PORT=8395 scripts/verify-gtt.sh --min-gtt-mib 18000
 
 ## Start with systemd
 
-You can skip this if you don't use systemd.
+You can skip this if you don't use systemd. The template is a **user** unit
+(runs as your account, not root) so Lando can reach your Docker socket.
 
-1. Copy the service template:
+1. Copy the service template into your user systemd directory:
    ```sh
-   cp open-webui.service.template open-webui.service
+   mkdir -p ~/.config/systemd/user
+   cp open-webui.service.template ~/.config/systemd/user/ollama-searxng.service
    ```
-2. Edit `youruser` and the path in `open-webui.service` (if not `/usr/local/ollama-searxng`).
-3. Enable and start it:
+2. Edit `WorkingDirectory` in that file if the repo is not at
+   `~/IdeaProjects/ollama-searxng`.
+3. Enable lingering (starts the unit at boot without a graphical login) and
+   enable the unit:
    ```sh
-   systemctl enable $(pwd)/open-webui.service
-   systemctl start open-webui.service
+   loginctl enable-linger "$USER"
+   systemctl --user daemon-reload
+   systemctl --user enable --now ollama-searxng.service
    ```
 
-**Note:** Ensure the service file path matches your installation directory before enabling it.
+Check status with `systemctl --user status ollama-searxng.service`. Logs:
+`journalctl --user -u ollama-searxng.service -f`.
 
 ## Update
 

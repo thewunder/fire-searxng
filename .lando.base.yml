@@ -110,7 +110,122 @@ services:
       ports:
         - "8395:8395"
 
+  # Firecrawl (self-hosted web extract for Hermes). Prebuilt GHCR images —
+  # do not `lando rebuild` the whole app or llama-cpp will rebuild from source.
+  # Dedicated Redis/Postgres/RabbitMQ so SearXNG's Valkey is untouched.
+  firecrawl-redis:
+    api: 3
+    type: lando
+    scanner: false
+    app_mount: false
+    services:
+      image: docker.io/redis:alpine
+      command: redis-server --bind 0.0.0.0
+
+  firecrawl-rabbitmq:
+    api: 3
+    type: lando
+    scanner: false
+    app_mount: false
+    services:
+      image: docker.io/rabbitmq:3-management
+      command: rabbitmq-server
+      healthcheck:
+        test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+        interval: 5s
+        timeout: 5s
+        retries: 8
+        start_period: 20s
+
+  firecrawl-postgres:
+    api: 3
+    type: lando
+    scanner: false
+    app_mount: false
+    services:
+      image: ghcr.io/firecrawl/nuq-postgres:latest
+      command: docker-entrypoint.sh postgres
+      environment:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: "995d982a7a1cfb2d863cc3d1e1ae2cb3"
+        POSTGRES_DB: postgres
+      volumes:
+        - firecrawl-pgdata:/var/lib/postgresql/data
+      healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U postgres"]
+        interval: 2s
+        timeout: 5s
+        retries: 30
+        start_period: 10s
+
+  firecrawl-playwright:
+    api: 3
+    type: lando
+    scanner: false
+    app_mount: false
+    services:
+      image: ghcr.io/firecrawl/playwright-service:latest
+      command: docker-entrypoint.sh pnpm start
+      environment:
+        PORT: "3000"
+        MAX_CONCURRENT_PAGES: "3"
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
+      mem_limit: 4G
+
+  firecrawl:
+    api: 3
+    type: lando
+    scanner: false
+    app_mount: false
+    ssl: true
+    sslExpose: false
+    services:
+      image: ghcr.io/firecrawl/firecrawl:latest
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
+      ulimits:
+        nofile:
+          soft: 65535
+          hard: 65535
+      mem_limit: 4G
+      environment:
+        HOST: "0.0.0.0"
+        PORT: "3002"
+        ENV: local
+        USE_DB_AUTHENTICATION: "false"
+        REDIS_URL: redis://firecrawl-redis:6379
+        REDIS_RATE_LIMIT_URL: redis://firecrawl-redis:6379
+        PLAYWRIGHT_MICROSERVICE_URL: http://firecrawl-playwright:3000/scrape
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: "995d982a7a1cfb2d863cc3d1e1ae2cb3"
+        POSTGRES_DB: postgres
+        POSTGRES_HOST: firecrawl-postgres
+        POSTGRES_PORT: "5432"
+        NUQ_RABBITMQ_URL: amqp://firecrawl-rabbitmq:5672
+        SEARXNG_ENDPOINT: http://searxng:8080
+        NUM_WORKERS_PER_QUEUE: "2"
+        CRAWL_CONCURRENT_REQUESTS: "3"
+        MAX_CONCURRENT_JOBS: "2"
+        BROWSER_POOL_SIZE: "2"
+        HARNESS_STARTUP_TIMEOUT_MS: "60000"
+      command: node dist/src/harness.js --start-docker
+      restart: unless-stopped
+      ports:
+        - "3002:3002"
+      depends_on:
+        firecrawl-redis:
+          condition: service_started
+        firecrawl-playwright:
+          condition: service_started
+        firecrawl-rabbitmq:
+          condition: service_healthy
+        firecrawl-postgres:irecrawl.lndo.site
+          condition: service_healthy
+
 proxy:
   searxng:
     - search.lndo.site:8080
+  firecrawl:
+    - firecrawl.lndo.site:3002
 

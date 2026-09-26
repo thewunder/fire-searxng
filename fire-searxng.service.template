@@ -1,12 +1,12 @@
 [Unit]
-Description=ollama-searxng (Open WebUI + SearXNG + llama.cpp via Lando)
+Description=fire-searxng (SearXNG + Firecrawl via Lando)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=%h/IdeaProjects/ollama-searxng
+WorkingDirectory=%h/IdeaProjects/fire-searxng
 Environment=PATH=%h/.lando/bin:/usr/local/bin:/usr/bin:/bin
 Environment=DOCKER_HOST=unix:///var/run/docker.sock
 # Docker is a system service; user units cannot Require= it. Wait for the daemon.

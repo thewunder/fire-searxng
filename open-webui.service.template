@@ -1,16 +1,22 @@
 [Unit]
-Description=Open WebUI
-After=docker.service
-Requires=docker.service
+Description=ollama-searxng (Open WebUI + SearXNG + llama.cpp via Lando)
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c 'cd /usr/local/ollama-searxng/ && lando start'
-ExecStop=/bin/bash -c 'cd /usr/local/ollama-searxng/ && lando stop'
 RemainAfterExit=yes
-User=youruser
-Group=youruser
-Environment="PATH=/home/youruser/.lando/bin:"
+WorkingDirectory=%h/IdeaProjects/ollama-searxng
+Environment=PATH=%h/.lando/bin:/usr/local/bin:/usr/bin:/bin
+Environment=DOCKER_HOST=unix:///var/run/docker.sock
+# Docker is a system service; user units cannot Require= it. Wait for the daemon.
+ExecStartPre=/usr/bin/timeout 120 /usr/bin/bash -c 'until /usr/bin/docker info >/dev/null 2>&1; do sleep 1; done'
+ExecStart=%h/.lando/bin/lando start
+ExecStop=%h/.lando/bin/lando stop
+TimeoutStartSec=infinity
+TimeoutStopSec=180
+StandardOutput=journal
+StandardError=journal
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

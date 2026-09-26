@@ -27,7 +27,153 @@ services:
       environment:
         SEARXNG_BASE_URL: https://search.lndo.site/
 
-  open-webui:
+  llama-cpp:
+    api: 3
+    type: lando
+    scanner: false
+    app_mount: false
+    ssl: false
+    services:
+      # Custom ROCmFP4 + MTP llama.cpp fork (charlie12345/rocmfp4-llama), BUILT
+      # from source via tools/Dockerfile.rocmfp4. This replaces the stock
+      # kyuz0/amd-strix-halo-toolboxes image because the Q4_0_ROCMFP4 tensor
+      # types in the plunderstruck GGUFs cannot load in upstream llama.cpp.
+      # Compute runs on Vulkan (-dev Vulkan0); ROCm is present only so the
+      # HIP-linked binary can initialise at startup. Build args mirror .env
+      # (ROCMFP4_THEROCK_VERSION / ROCMFP4_GFX). See docs/ for benchmarks.
+      build:
+        context: tools
+        dockerfile: Dockerfile.rocmfp4
+        args:
+          THEROCK_VERSION: "7.13.0a20260515"
+          CMAKE_HIP_ARCHITECTURES: gfx1151
+      image: llama-rocmfp4-strix:latest
+      # ROCmFP4 needs BOTH nodes: /dev/dri for the Vulkan compute path, /dev/kfd
+      # because the HIP-linked binary initialises ROCm at startup.
+      devices:
+        - /dev/kfd:/dev/kfd
+        - /dev/dri:/dev/dri
+      # GIDs so the container can reach /dev/dri + /dev/kfd if it runs non-root.
+      # render=992, video=44 on this box (`getent group render|video`).
+      group_add:
+        - "992"
+        - "44"
+      # ROCm/HSA wants host IPC, an unconfined seccomp profile, and no
+      # locked-memory ceiling so it can pin large buffers in GTT (128 GB UMA).
+      ipc: host
+      security_opt:
+        - seccomp=unconfined
+      ulimits:
+        memlock: -1
+      environment:
+        # Keep weights/KV in GTT, not the small VRAM carve-out (HIP + Vulkan
+        # sides; llama.cpp treats these as presence checks — any value enables).
+        GGML_HIP_ENABLE_UNIFIED_MEMORY: "1"
+        GGML_VK_PREFER_HOST_MEMORY: "1"
+      volumes:
+        # Hugging Face cache repo dir for the ROCmFP4 GGUF. It holds snapshots/
+        # AND blobs/, so the snapshot symlinks resolve inside the container.
+        - ~/.cache/huggingface/hub/models--plunderstruck--Qwen3.6-35B-A3B-MTP-ROCmFP4-GGUF:/models:ro
+      # The image ENTRYPOINT is /app/llama-server, but Lando runs `command`, so
+      # invoke the binary by absolute path. Flags mirror docker-compose.rocmfp4.yml.
+      # Vision is off by default; to enable add:
+      #   --mmproj /models/snapshots/fe537448c6eb259e6591fea8b9ed320a64ef4856/mmproj-F32.gguf
+      command: >
+        /app/llama-server
+        --model /models/snapshots/fe537448c6eb259e6591fea8b9ed320a64ef4856/Qwen3.6-35B-A3B-MTP-ROCmFP4-STRIX-embF16-headQ6.gguf
+        --alias qwen3.6-35b-a3b-mtp
+        --host 0.0.0.0
+        --port 8395
+        -dev Vulkan0
+        --n-gpu-layers 999
+        --ctx-size 262144
+        -ctk f16
+        -ctv f16
+        -fa on
+        -b 2048
+        -ub 1024
+        --parallel 1
+        --no-mmap
+        --spec-type draft-mtp
+        --spec-draft-device Vulkan0
+        --spec-draft-ngl all
+        --spec-draft-n-max 5
+        --spec-draft-p-split 0.10
+        --jinja
+        --chat-template-file /models/snapshots/fe537448c6eb259e6591fea8b9ed320a64ef4856/chat_template.jinja
+        --reasoning-format deepseek
+        --chat-template-kwargs '{"preserve_thinking": true}'
+      # The image bakes a HEALTHCHECK on :8080; we serve on :8395, so disable it
+      # to avoid a false "unhealthy". Lando's own scanner is off above.
+      healthcheck:
+        disable: true
+      ports:
+        - "8395:8395"
+
+  # Firecrawl (self-hosted web extract for Hermes). Prebuilt GHCR images —
+  # do not `lando rebuild` the whole app or llama-cpp will rebuild from source.
+  # Dedicated Redis/Postgres/RabbitMQ so SearXNG's Valkey is untouched.
+  firecrawl-redis:
+    api: 3
+    type: lando
+    scanner: false
+    app_mount: false
+    services:
+      image: docker.io/redis:alpine
+      command: redis-server --bind 0.0.0.0
+
+  firecrawl-rabbitmq:
+    api: 3
+    type: lando
+    scanner: false
+    app_mount: false
+    services:
+      image: docker.io/rabbitmq:3-management
+      command: rabbitmq-server
+      healthcheck:
+        test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+        interval: 5s
+        timeout: 5s
+        retries: 8
+        start_period: 20s
+
+  firecrawl-postgres:
+    api: 3
+    type: lando
+    scanner: false
+    app_mount: false
+    services:
+      image: ghcr.io/firecrawl/nuq-postgres:latest
+      command: docker-entrypoint.sh postgres
+      environment:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: "995d982a7a1cfb2d863cc3d1e1ae2cb3"
+        POSTGRES_DB: postgres
+      volumes:
+        - firecrawl-pgdata:/var/lib/postgresql/data
+      healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U postgres"]
+        interval: 2s
+        timeout: 5s
+        retries: 30
+        start_period: 10s
+
+  firecrawl-playwright:
+    api: 3
+    type: lando
+    scanner: false
+    app_mount: false
+    services:
+      image: ghcr.io/firecrawl/playwright-service:latest
+      command: docker-entrypoint.sh pnpm start
+      environment:
+        PORT: "3000"
+        MAX_CONCURRENT_PAGES: "3"
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
+      mem_limit: 4G
+
+  firecrawl:
     api: 3
     type: lando
     scanner: false
@@ -35,44 +181,51 @@ services:
     ssl: true
     sslExpose: false
     services:
-      image: ghcr.io/open-webui/open-webui:main
-      command: bash start.sh
-      volumes:
-        - open-webui-data:/app/backend/data
+      image: ghcr.io/firecrawl/firecrawl:latest
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
+      ulimits:
+        nofile:
+          soft: 65535
+          hard: 65535
+      mem_limit: 4G
       environment:
-        WEBUI_AUTH: false
-        OLLAMA_BASE_URL: http://ollama:11434
-
-  ollama:
-    api: 3
-    type: lando
-    scanner: false
-    app_mount: false
-    ssl: false
-    services:
-      # User :rocm if you have an AMD GPU
-      image: ollama/ollama
-      command: /bin/ollama serve
-      volumes:
-        - /usr/share/ollama/.ollama:/root/.ollama
-      environment:
-        OLLAMA_HOST: "0.0.0.0:11434"
-        # OLLAMA_VULKAN: 1
-
-      devices:
-        - /dev/kfd:/dev/kfd
-        - /dev/dri:/dev/dri
+        HOST: "0.0.0.0"
+        PORT: "3002"
+        ENV: local
+        USE_DB_AUTHENTICATION: "false"
+        REDIS_URL: redis://firecrawl-redis:6379
+        REDIS_RATE_LIMIT_URL: redis://firecrawl-redis:6379
+        PLAYWRIGHT_MICROSERVICE_URL: http://firecrawl-playwright:3000/scrape
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: "995d982a7a1cfb2d863cc3d1e1ae2cb3"
+        POSTGRES_DB: postgres
+        POSTGRES_HOST: firecrawl-postgres
+        POSTGRES_PORT: "5432"
+        NUQ_RABBITMQ_URL: amqp://firecrawl-rabbitmq:5672
+        SEARXNG_ENDPOINT: http://searxng:8080
+        NUM_WORKERS_PER_QUEUE: "2"
+        CRAWL_CONCURRENT_REQUESTS: "3"
+        MAX_CONCURRENT_JOBS: "2"
+        BROWSER_POOL_SIZE: "2"
+        HARNESS_STARTUP_TIMEOUT_MS: "60000"
+      command: node dist/src/harness.js --start-docker
+      restart: unless-stopped
       ports:
-        - "11434:11434"
+        - "3002:3002"
+      depends_on:
+        firecrawl-redis:
+          condition: service_started
+        firecrawl-playwright:
+          condition: service_started
+        firecrawl-rabbitmq:
+          condition: service_healthy
+        firecrawl-postgres:irecrawl.lndo.site
+          condition: service_healthy
 
 proxy:
   searxng:
     - search.lndo.site:8080
-  open-webui:
-    - open-webui.lndo.site:8080
+  firecrawl:
+    - firecrawl.lndo.site:3002
 
-tooling:
-  ollama:
-    service: ollama
-    description: Run ollama CLI commands
-    cmd: ollama
